@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RBR Tracker</title>
+
+  <style>
+    body {
+      background: radial-gradient(circle at top, #111 0%, #000 80%);
+      color: white;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      text-align: center;
+      margin: 0;
+    }
+
+    img {
+      width: 220px;
+      margin-top: 20px;
+    }
+
+    h2 {
+      color: #ff2c2c;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .panel {
+      background: #111;
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px auto;
+      width: 90%;
+      max-width: 900px;
+      box-shadow: 0 0 20px rgba(255,0,0,0.15);
+    }
+
+    input, select {
+      display: block;
+      margin: 10px auto;
+      padding: 12px;
+      width: 220px;
+      border-radius: 6px;
+      border: none;
+      background: #1a1a1a;
+      color: white;
+      outline: none;
+      transition: 0.2s;
+    }
+
+    input:focus, select:focus {
+      box-shadow: 0 0 10px red;
+    }
+
+    button {
+      padding: 12px 25px;
+      background: linear-gradient(45deg, #ff0000, #ff4d4d);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: 0.2s;
+    }
+
+    button:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 15px red;
+    }
+
+    #message {
+      margin-top: 10px;
+      color: #00ff88;
+      font-weight: bold;
+      display: none;
+    }
+
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    td, th {
+      border: 1px solid #222;
+      padding: 12px;
+    }
+
+    th {
+      background: #111;
+      color: #ff2c2c;
+    }
+
+    tr:nth-child(even) {
+      background: #0f0f0f;
+    }
+
+    tr:hover {
+      background: #1a1a1a;
+      transform: scale(1.01);
+      transition: 0.2s;
+    }
+  </style>
+
+</head>
+
+<body>
+
+<img src="logo.png">
+
+<div class="panel">
+<h2>Ajouter un temps</h2>
+
+<select id="championnatInput" onchange="updateRallyes()">
+  <option value="">Choisir championnat</option>
+</select>
+
+<select id="rallye">
+  <option value="">Choisir rallye</option>
+</select>
+
+<input id="speciale" placeholder="Speciale (S1)">
+<input id="categorie" placeholder="Categorie">
+<input id="temps" placeholder="Temps (3:45:789)">
+
+<button onclick="envoyer()">Envoyer</button>
+
+<div id="message">Temps envoye ✔</div>
+</div>
+
+<div class="panel">
+<h2>Filtre</h2>
+
+<select id="championnatSelect" onchange="charger()">
+  <option value="ALL">Tous les championnats</option>
+</select>
+</div>
+
+<div class="panel">
+<h2>Meilleurs temps</h2>
+<table id="tableau"></table>
+</div>
+
+<div class="panel">
+<h2>Pilotes et categories</h2>
+<table id="pilotesTable"></table>
+</div>
+
+<script>
+const url = "https://script.google.com/macros/s/AKfycbyy8Mzk4OYTMbn_zXHD8UY-IOSAi4s6goTAiOGmgbij500lmIH6s4NLl0qwquwAqVnAUA/exec";
+
+let DATA = null;
+
+// NORMALISATION
+function normaliserTemps(t){
+  if (!t) return "99:59:999";
+  const p = t.split(":");
+  return p[0]+":"+p[1].padStart(2,"0")+":"+p[2].padStart(3,"0");
+}
+
+function toMs(t){
+  const p = normaliserTemps(t).split(":");
+  return p[0]*60000 + p[1]*1000 + parseInt(p[2]);
+}
+
+// ENVOYER
+function envoyer(){
+  fetch(url,{
+    method:"POST",
+    body:JSON.stringify({
+      rallye: rallye.value,
+      speciale: speciale.value,
+      categorie: categorie.value,
+      temps: normaliserTemps(temps.value)
+    })
+  }).then(()=>{
+    afficherMessage();
+    charger();
+  });
+}
+
+function afficherMessage(){
+  const m=document.getElementById("message");
+  m.style.display="block";
+  setTimeout(()=>m.style.display="none",2000);
+}
+
+// UPDATE RALLYES
+function updateRallyes(){
+  const champ = championnatInput.value;
+  const select = document.getElementById("rallye");
+
+  select.innerHTML = `<option value="">Choisir rallye</option>`;
+
+  DATA.rallyes.slice(1).forEach(r=>{
+    if(r[1]===champ){
+      const opt=document.createElement("option");
+      opt.value=r[0];
+      opt.textContent=r[0];
+      select.appendChild(opt);
+    }
+  });
+}
+
+// MEILLEURS
+function filtrerMeilleurs(data){
+  const res={};
+  data.slice(1).forEach(r=>{
+    const key=r[0]+"_"+r[1]+"_"+r[2];
+    const val=toMs(r[3]);
+    if(!res[key]||val<res[key].time){
+      res[key]={rallye:r[0],speciale:r[1],categorie:r[2],time:val,display:r[3]};
+    }
+  });
+  return Object.values(res);
+}
+
+// CHARGER
+function charger(){
+  fetch(url).then(r=>r.json()).then(data=>{
+
+    DATA=data;
+
+    const champs=[...new Set(data.rallyes.slice(1).map(r=>r[1]))];
+
+    const select1=document.getElementById("championnatSelect");
+    const select2=document.getElementById("championnatInput");
+
+    if(select1.options.length<=1){
+      champs.forEach(c=>{
+        select1.innerHTML+=`<option>${c}</option>`;
+        select2.innerHTML+=`<option>${c}</option>`;
+      });
+    }
+
+    const selected=select1.value;
+
+    const rallyes=data.rallyes.slice(1)
+      .filter(r=>selected==="ALL"||r[1]===selected)
+      .map(r=>r[0]);
+
+    const temps=data.temps.slice(1)
+      .filter(t=>selected==="ALL"||rallyes.includes(t[0]));
+
+    const clean=filtrerMeilleurs([data.temps[0],...temps]);
+
+    const table=document.getElementById("tableau");
+    table.innerHTML=`<tr><th>Rallye</th><th>Speciale</th><th>Categorie</th><th>Temps</th></tr>`;
+    clean.forEach(r=>{
+      table.innerHTML+=`<tr><td>${r.rallye}</td><td>${r.speciale}</td><td>${r.categorie}</td><td>${r.display}</td></tr>`;
+    });
+
+    const pilotes=data.pilotes.slice(1)
+      .filter(p=>selected==="ALL"||p[1]===selected);
+
+    const pt=document.getElementById("pilotesTable");
+    pt.innerHTML=`<tr><th>Pilote</th><th>Championnat</th><th>Categorie</th></tr>`;
+    pilotes.forEach(p=>{
+      pt.innerHTML+=`<tr><td>${p[0]}</td><td>${p[1]}</td><td>${p[2]}</td></tr>`;
+    });
+
+  });
+}
+
+charger();
+</script>
+
+</body>
+</html>
